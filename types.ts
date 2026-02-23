@@ -12,7 +12,6 @@ export interface StickerSheetConfig {
   aspectRatio: AspectRatio;
   extraPrompt: string;
   style: StickerStyle;
-  includeCaptions: boolean;
 }
 
 export interface StickerConfig {

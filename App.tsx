@@ -21,6 +21,28 @@ interface StickerSlot {
 }
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const STYLE_OPTIONS: Array<{
+  value: StickerStyle;
+  label: '2D' | '3D';
+  title: string;
+  hint: string;
+  previewSrc: string;
+}> = [
+  {
+    value: 'Chibi 2D',
+    label: '2D',
+    title: 'Chibi 2D',
+    hint: 'เส้นคม สีสด',
+    previewSrc: '/Chibi2D.png',
+  },
+  {
+    value: 'Pixar 3D',
+    label: '3D',
+    title: 'Pixar 3D',
+    hint: 'นุ่มลึก มีมิติ',
+    previewSrc: '/Pixar3D.png',
+  },
+];
 
 const App: React.FC = () => {
   const [showKeyScreen, setShowKeyScreen] = useState<boolean | null>(null);
@@ -34,14 +56,14 @@ const App: React.FC = () => {
   const [simulatedStickerCount, setSimulatedStickerCount] = useState(1);
   const [generationTargetCount, setGenerationTargetCount] = useState(TOTAL_STICKERS);
   const [isComplianceChecking, setIsComplianceChecking] = useState(false);
+  const [isPromptExpanded, setIsPromptExpanded] = useState(false);
 
   const [config, setConfig] = useState<StickerSheetConfig>({
     base64Image: '',
-    size: '1K',
+    size: '2K',
     aspectRatio: '1:1',
     extraPrompt: '',
     style: 'Pixar 3D',
-    includeCaptions: true,
   });
 
   const geminiServiceRef = useRef<GeminiService>(new GeminiService());
@@ -251,7 +273,13 @@ const App: React.FC = () => {
         ? `Regenerate Unchecked (${unlockedCount})`
         : 'Regenerate'
       : 'Generate';
-  const runnerAvatarUrl = stickerSlots[0]?.url || config.base64Image;
+  const generateHelperText = loading
+    ? '🔄 Generating'
+    : hasGenerated && lockedCount === TOTAL_STICKERS
+      ? '🔒 Locked'
+      : hasGenerated
+        ? '✅ Ready'
+        : '';
 
   const loadingHeadline =
     processingStep === 'analyzing'
@@ -286,15 +314,19 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-dvh bg-[#f8fafc] text-slate-900">
-      <a href="#main-content" className="skip-link focus-ring">
-        Skip to main content
-      </a>
-
       <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 px-4 py-4 backdrop-blur-[20px]">
         <div className="mx-auto flex w-full max-w-md items-center justify-between gap-4 sm:max-w-xl">
-          <div>
+          <div className="space-y-1">
             <p className="text-xs font-semibold tracking-wide text-slate-600">Sticker Studio</p>
-            <h1 className="text-2xl font-semibold leading-tight text-slate-900">Sticker Composer</h1>
+            <h1 className="bg-gradient-to-r from-indigo-600 via-sky-500 to-emerald-500 bg-clip-text text-2xl font-semibold leading-tight text-transparent">
+              Mia-U-Sticker
+            </h1>
+            <div className="flex items-center gap-1.5" aria-hidden="true">
+              <span className="h-2 w-2 rounded-full bg-rose-400" />
+              <span className="h-2 w-2 rounded-full bg-amber-400" />
+              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+              <span className="h-2 w-2 rounded-full bg-sky-400" />
+            </div>
           </div>
 
           <div
@@ -314,8 +346,8 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main id="main-content" className="mx-auto flex w-full max-w-md flex-col gap-6 px-4 py-6 sm:max-w-xl" aria-busy={loading}>
-        <section className="rounded-[2.5rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="upload-heading">
+      <main id="main-content" className="mx-auto flex w-full max-w-md flex-col gap-3 px-4 pb-6 pt-3 sm:max-w-xl" aria-busy={loading}>
+        <section className="overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white shadow-sm" aria-labelledby="upload-heading">
           <h2 id="upload-heading" className="sr-only">
             Source photo
           </h2>
@@ -329,11 +361,11 @@ const App: React.FC = () => {
             className="sr-only"
           />
 
-          <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-gradient-to-b from-white to-slate-100/70">
+          <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-b from-slate-50 to-slate-100/80">
             <button
               type="button"
               onClick={openImagePicker}
-              className="focus-ring relative block aspect-[4/5] w-full overflow-hidden sm:aspect-[4/3]"
+              className="focus-ring relative block aspect-[11/10] w-full overflow-hidden sm:aspect-[4/3]"
               aria-label="Choose or capture source photo"
             >
               {config.base64Image ? (
@@ -395,72 +427,101 @@ const App: React.FC = () => {
             )}
 
             {loading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-white/45 backdrop-blur-[2px]" aria-hidden="true">
-                <span className="h-10 w-10 animate-pulse rounded-full border-2 border-indigo-300 bg-white/70" />
+              <div className="pointer-events-none absolute inset-0 flex items-end p-3">
+                <div
+                  className="w-full rounded-2xl bg-black/25 p-3 text-white backdrop-blur-[2px]"
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/50 border-t-white" aria-hidden="true" />
+                    <p className="text-sm font-semibold text-white">{loadingHeadline}</p>
+                  </div>
+                  <p className="mt-1 text-xs text-white/90">{loadingSubtext}</p>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/30">
+                    <span
+                      className="block h-full rounded-full bg-indigo-300 transition-all duration-500"
+                      style={{ width: `${simulatedProgress}%` }}
+                    />
+                  </div>
+                </div>
               </div>
             )}
           </div>
+
         </section>
 
-        <section className="rounded-[2.5rem] border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Controls</h2>
+        <section className="rounded-[2.5rem] border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="sr-only">Controls</h2>
 
-          <fieldset className="mt-5">
-            <legend className="text-sm font-medium text-slate-800">Style</legend>
-            <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {(['Chibi 2D', 'Pixar 3D'] as StickerStyle[]).map((style) => {
-                const selected = config.style === style;
+          <fieldset className="mt-2">
+            <legend className="text-xl font-bold tracking-tight text-slate-900">Style</legend>
+            <div className="mt-2 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              {STYLE_OPTIONS.map((styleOption) => {
+                const selected = config.style === styleOption.value;
                 return (
                   <label
-                    key={style}
-                    className={`min-h-11 rounded-2xl border px-4 py-3 text-sm font-semibold ${
+                    key={styleOption.value}
+                    className={`rounded-2xl border px-3 py-2.5 ${
                       selected
-                        ? 'border-indigo-700 bg-indigo-600 text-white'
-                        : 'border-slate-300 bg-white text-slate-800 hover:border-indigo-400'
+                        ? 'border-indigo-700 bg-indigo-50 text-slate-900 ring-2 ring-indigo-100'
+                        : 'border-slate-300 bg-white text-slate-800 hover:border-indigo-300'
                     } flex cursor-pointer items-center gap-3`}
                   >
                     <input
                       type="radio"
                       name="sticker-style"
-                      value={style}
+                      value={styleOption.value}
                       checked={selected}
-                      onChange={() => setConfig((prev) => ({ ...prev, style }))}
+                      onChange={() => setConfig((prev) => ({ ...prev, style: styleOption.value }))}
                       className="focus-ring h-4 w-4 border-slate-400 text-indigo-600"
                     />
-                    {style}
+                    <span
+                      className={`relative flex h-14 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl ${
+                        selected ? 'bg-indigo-50' : 'bg-slate-50'
+                      }`}
+                    >
+                      <img
+                        src={styleOption.previewSrc}
+                        alt={`${styleOption.label} style preview`}
+                        className="h-full w-full object-contain"
+                        loading="lazy"
+                      />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[1.15rem] font-semibold leading-none">{styleOption.label}</span>
+                      <span className="mt-0.5 block text-[0.95rem] font-medium leading-tight text-slate-700">{styleOption.title}</span>
+                      <span className="mt-0.5 block text-[0.9rem] leading-tight text-slate-500">{styleOption.hint}</span>
+                    </span>
                   </label>
                 );
               })}
             </div>
           </fieldset>
 
-          <div className="mt-5">
-            <label htmlFor="prompt-details" className="text-sm font-medium text-slate-800">
+          <div className="mt-2.5">
+            <label htmlFor="prompt-details" className="sr-only">
               Prompt details
             </label>
             <textarea
               id="prompt-details"
               value={config.extraPrompt}
               onChange={(e) => setConfig((prev) => ({ ...prev, extraPrompt: e.target.value }))}
-              className="focus-ring mt-2 min-h-32 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900"
-              placeholder="Example: glasses, holding coffee cup, smiling confidently"
+              onFocus={() => setIsPromptExpanded(true)}
+              onBlur={() => {
+                if (!config.extraPrompt.trim()) setIsPromptExpanded(false);
+              }}
+              rows={isPromptExpanded ? 5 : 1}
+              className={`focus-ring w-full resize-none rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 transition-[height] ${
+                isPromptExpanded ? 'min-h-32' : 'h-12'
+              }`}
+              placeholder="prompt detail"
+              aria-label="Prompt details"
             />
           </div>
 
-          <div className="mt-5 flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <input
-              id="include-captions"
-              type="checkbox"
-              checked={config.includeCaptions}
-              onChange={(e) => setConfig((prev) => ({ ...prev, includeCaptions: e.target.checked }))}
-              className="focus-ring mt-1 h-5 w-5 rounded border-slate-400 text-indigo-600"
-            />
-            <label htmlFor="include-captions" className="text-sm text-slate-800">
-              Captions
-            </label>
-          </div>
-
-          <div className="mt-6 space-y-3">
+          <div className="mt-4 space-y-2">
             <button
               type="button"
               onClick={generateSheet}
@@ -470,77 +531,19 @@ const App: React.FC = () => {
                 || !isOnline
                 || (hasGenerated && stickerSlots.length === TOTAL_STICKERS && lockedCount === TOTAL_STICKERS)
               }
-              aria-describedby="generate-helper"
+              aria-describedby={generateHelperText ? 'generate-helper' : undefined}
               className="focus-ring min-h-11 w-full rounded-2xl bg-indigo-600 px-4 py-3 text-base font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-400"
             >
               {generateButtonLabel}
             </button>
 
-            <p id="generate-helper" className="text-sm text-slate-700" role="status" aria-live="polite">
-              {loading
-                ? loadingHeadline
-                : hasGenerated && lockedCount === TOTAL_STICKERS
-                  ? 'ปลดล็อกอย่างน้อย 1 รูปเพื่อ Regenerate'
-                  : hasGenerated
-                    ? `ล็อกแล้ว ${lockedCount}/${TOTAL_STICKERS} รูป`
-                    : 'Ready'}
-            </p>
+            {generateHelperText && (
+              <p id="generate-helper" className="text-sm text-slate-700" role="status" aria-live="polite">
+                {generateHelperText}
+              </p>
+            )}
           </div>
 
-          {loading && config.base64Image && (
-            <div className="mt-4 rounded-3xl border border-indigo-100 bg-indigo-50/70 p-4" role="status" aria-live="polite" aria-atomic="true">
-              <div className="loading-runner-track">
-                <div className="loading-runner-lane" />
-                <div className="loading-runner-avatar">
-                  <div className="loading-runner-sticker-shell">
-                    <img src={runnerAvatarUrl} alt="" className="loading-runner-sticker-image" />
-                  </div>
-                  <span className="loading-runner-wheel loading-runner-wheel-left" />
-                  <span className="loading-runner-wheel loading-runner-wheel-right" />
-                </div>
-                <span className="loading-runner-speed loading-runner-speed-a" />
-                <span className="loading-runner-speed loading-runner-speed-b" />
-                <span className="loading-runner-speed loading-runner-speed-c" />
-              </div>
-
-              <p className="mt-3 text-sm font-semibold text-slate-900">{loadingHeadline}</p>
-              <p className="text-xs text-slate-700">{loadingSubtext}</p>
-
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-indigo-100">
-                <span
-                  className="block h-full rounded-full bg-indigo-600 transition-all duration-500"
-                  style={{ width: `${simulatedProgress}%` }}
-                />
-              </div>
-
-              <ul className="mt-3 space-y-1.5 text-xs text-slate-700">
-                <li className="flex items-center gap-2">
-                  <span className="text-base" aria-hidden="true">
-                    {processingStep === 'analyzing' ? '🔄' : '✅'}
-                  </span>
-                  <span>วิเคราะห์ภาพต้นฉบับ</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-base" aria-hidden="true">
-                    {processingStep === 'generating' && !isComplianceChecking ? '🎨' : processingStep === 'removing' || processingStep === 'complete' ? '✅' : '⏳'}
-                  </span>
-                  <span>{`กำลังสร้างสติ๊กเกอร์ ${simulatedStickerCount}/${generationTargetCount}`}</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-base" aria-hidden="true">
-                    {processingStep === 'generating' && isComplianceChecking ? '🛡️' : processingStep === 'removing' || processingStep === 'complete' ? '✅' : '⏳'}
-                  </span>
-                  <span>กำลังตรวจสอบกฎระเบียบของ LINE</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-base" aria-hidden="true">
-                    {processingStep === 'removing' ? '📦' : processingStep === 'complete' ? '✅' : '⏳'}
-                  </span>
-                  <span>กำลังเตรียมไฟล์ PNG</span>
-                </li>
-              </ul>
-            </div>
-          )}
         </section>
 
         {error && (
@@ -562,7 +565,7 @@ const App: React.FC = () => {
               <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">PNG ready</span>
             </div>
 
-            {stickerSlots.length === TOTAL_STICKERS && (
+            {stickerSlots.length === TOTAL_STICKERS ? (
               <>
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm text-slate-700">ติ๊กถูกที่สติ๊กเกอร์ที่ต้องการเก็บไว้ก่อนกด Regenerate</p>
@@ -573,45 +576,46 @@ const App: React.FC = () => {
 
                 <div className="mt-3 grid grid-cols-4 gap-3">
                   {stickerSlots.map((slot, index) => (
-                    <label
+                    <button
+                      type="button"
                       key={slot.id}
+                      onClick={() => toggleStickerLock(index)}
+                      disabled={loading}
+                      aria-pressed={slot.locked}
+                      aria-label={`Select sticker ${index + 1}`}
                       className={`relative block overflow-hidden rounded-2xl border bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZhw1gGGYhAGBZIA/nYDCgHQAmUPwdICYAOIyDPr5CABdamAivXkrFgAAAABJRU5ErkJggg==')] bg-repeat p-1.5 ${
-                        slot.locked ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-slate-200'
+                        slot.locked ? 'border-emerald-400 ring-2 ring-emerald-200' : 'border-slate-200'
                       }`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={slot.locked}
-                        onChange={() => toggleStickerLock(index)}
-                        disabled={loading}
-                        className="focus-ring absolute left-2 top-2 z-10 h-5 w-5 rounded border-slate-300 bg-white text-indigo-600 shadow"
-                        aria-label={`Lock sticker ${index + 1}`}
-                      />
                       <img
                         src={slot.url}
                         alt={`Sticker ${index + 1}`}
-                        className="aspect-square w-full rounded-xl bg-white object-contain"
+                        className="focus-ring aspect-square w-full rounded-xl bg-white object-contain"
                       />
-                      <span
-                        className={`pointer-events-none absolute bottom-2 right-2 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          slot.locked ? 'bg-indigo-600 text-white' : 'bg-white/90 text-slate-700'
-                        }`}
-                      >
-                        {slot.locked ? 'เก็บไว้' : `#${index + 1}`}
-                      </span>
-                    </label>
+                      {slot.locked && (
+                        <>
+                          <span className="pointer-events-none absolute inset-1.5 rounded-xl bg-emerald-400/20" aria-hidden="true" />
+                          <span
+                            className="pointer-events-none absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/90 text-xs font-bold text-white shadow"
+                            aria-hidden="true"
+                          >
+                            ✓
+                          </span>
+                        </>
+                      )}
+                    </button>
                   ))}
                 </div>
               </>
+            ) : (
+              <div className="mt-5 overflow-hidden rounded-[2rem] border border-slate-200 bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZhw1gGGYhAGBZIA/nYDCgHQAmUPwdICYAOIyDPr5CABdamAivXkrFgAAAABJRU5ErkJggg==')] bg-repeat p-2">
+                <img
+                  src={transparentImageUrl}
+                  alt="Generated transparent sticker sheet preview"
+                  className="aspect-square w-full rounded-[1.5rem] bg-white object-contain"
+                />
+              </div>
             )}
-
-            <div className="mt-5 overflow-hidden rounded-[2rem] border border-slate-200 bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZhw1gGGYhAGBZIA/nYDCgHQAmUPwdICYAOIyDPr5CABdamAivXkrFgAAAABJRU5ErkJggg==')] bg-repeat p-2">
-              <img
-                src={transparentImageUrl}
-                alt="Generated transparent sticker sheet preview"
-                className="aspect-square w-full rounded-[1.5rem] bg-white object-contain"
-              />
-            </div>
 
             <button
               type="button"

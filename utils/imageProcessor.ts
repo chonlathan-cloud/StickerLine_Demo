@@ -70,13 +70,15 @@ export async function processTransparentSheet(
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
 
-        // ฟังก์ชันตรวจสอบสี Chroma Green
-        const isChromaGreen = (idx: number) => {
+        // ตรวจจับพื้นหลังเขียวแบบเข้มเพื่อใช้เป็น mask หลัก
+        const isStrongChromaGreen = (idx: number) => {
           const rVal = data[idx];
           const gVal = data[idx + 1];
           const bVal = data[idx + 2];
-          // ตรวจสอบสีเขียว (Green > Red และ Green > Blue อย่างมีนัยสำคัญ)
-          return gVal > 150 && rVal < 140 && bVal < 140;
+          const dominantAgainstRed = gVal > rVal * 1.2;
+          const dominantAgainstBlue = gVal > bVal * 1.2;
+          const greenExcess = gVal - Math.max(rVal, bVal);
+          return gVal > 90 && dominantAgainstRed && dominantAgainstBlue && greenExcess > 28;
         };
 
         const visited = new Uint8Array(canvas.width * canvas.height);
@@ -84,15 +86,15 @@ export async function processTransparentSheet(
 
         // เริ่มต้น Flood fill จากขอบทั้ง 4 ด้าน
         for (let x = 0; x < canvas.width; x++) {
-          if (isChromaGreen(x * 4)) { q.push([x, 0]); visited[x] = 1; }
+          if (isStrongChromaGreen(x * 4)) { q.push([x, 0]); visited[x] = 1; }
           const botIdx = (canvas.height - 1) * canvas.width + x;
-          if (isChromaGreen(botIdx * 4)) { q.push([x, canvas.height - 1]); visited[botIdx] = 1; }
+          if (isStrongChromaGreen(botIdx * 4)) { q.push([x, canvas.height - 1]); visited[botIdx] = 1; }
         }
         for (let y = 0; y < canvas.height; y++) {
           const leftIdx = y * canvas.width;
-          if (isChromaGreen(leftIdx * 4)) { q.push([0, y]); visited[leftIdx] = 1; }
+          if (isStrongChromaGreen(leftIdx * 4)) { q.push([0, y]); visited[leftIdx] = 1; }
           const rightIdx = y * canvas.width + (canvas.width - 1);
-          if (isChromaGreen(rightIdx * 4)) { q.push([canvas.width - 1, y]); visited[rightIdx] = 1; }
+          if (isStrongChromaGreen(rightIdx * 4)) { q.push([canvas.width - 1, y]); visited[rightIdx] = 1; }
         }
 
         while (q.length > 0) {
@@ -106,10 +108,55 @@ export async function processTransparentSheet(
           for (const [nx, ny] of neighbors) {
             if (nx >= 0 && nx < canvas.width && ny >= 0 && ny < canvas.height) {
               const nIdx = ny * canvas.width + nx;
-              if (!visited[nIdx] && isChromaGreen(nIdx * 4)) {
+              if (!visited[nIdx] && isStrongChromaGreen(nIdx * 4)) {
                 visited[nIdx] = 1;
                 q.push([nx, ny]);
               }
+            }
+          }
+        }
+
+        // ลด green spill บริเวณขอบตัวละครเพื่อให้ PNG คมขึ้น
+        const hasTransparentNeighbor = (x: number, y: number) => {
+          const neighbors: [number, number][] = [
+            [x + 1, y],
+            [x - 1, y],
+            [x, y + 1],
+            [x, y - 1],
+          ];
+
+          for (const [nx, ny] of neighbors) {
+            if (nx < 0 || nx >= canvas.width || ny < 0 || ny >= canvas.height) continue;
+            const nIdx = (ny * canvas.width + nx) * 4;
+            if (data[nIdx + 3] === 0) return true;
+          }
+          return false;
+        };
+
+        for (let y = 0; y < canvas.height; y++) {
+          for (let x = 0; x < canvas.width; x++) {
+            const idx = (y * canvas.width + x) * 4;
+            const alpha = data[idx + 3];
+            if (alpha === 0) continue;
+
+            const rVal = data[idx];
+            const gVal = data[idx + 1];
+            const bVal = data[idx + 2];
+            const greenExcess = gVal - Math.max(rVal, bVal);
+            if (greenExcess <= 10) continue;
+
+            const nearTransparent = hasTransparentNeighbor(x, y);
+            const spillStrength = nearTransparent
+              ? Math.min(1, greenExcess / 120)
+              : Math.min(0.5, greenExcess / 180);
+            const deGreen = Math.round(greenExcess * spillStrength);
+
+            data[idx + 1] = Math.max(0, gVal - deGreen);
+            data[idx] = Math.min(255, rVal + Math.round(deGreen * 0.28));
+            data[idx + 2] = Math.min(255, bVal + Math.round(deGreen * 0.35));
+
+            if (nearTransparent && greenExcess > 70) {
+              data[idx + 3] = Math.max(0, alpha - Math.round((greenExcess - 70) * 0.65));
             }
           }
         }
